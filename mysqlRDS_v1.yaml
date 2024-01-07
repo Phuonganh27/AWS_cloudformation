@@ -4,7 +4,7 @@ Parameters:
   DBName:
     Type: String
     Description: The name of the database
-    Default: MyAuroraDB
+    Default: MyMySQLDB
 
   MasterUsername:
     Type: String
@@ -20,69 +20,67 @@ Parameters:
   DBInstanceIdentifier:
     Type: String
     Description: The identifier for the Aurora DB instance
-    Default: MyAuroraDBInstance
+    Default: MyMySQLDBInstance
 
   ProxyName:
     Type: String
     Description: The name for the Aurora Database Proxy
-    Default: MyAuroraDBProxy
+    Default: MyMySQLDBProxy
+
+  SecretReaderRoleArn:
+    Type: String
+    Default: arn:aws:iam::137026196014:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS
+
+  ProxySecretArn:
+    Type: String
+    Default: arn:aws:secretsmanager:ap-northeast-1:137026196014:secret:MySecretForMySQLDBProxy-BX1XSU
+
+  SubnetIds:
+    Type: String
+    Default: subnet-077b1c87b03d9fc4f,subnet-0df0d9dd885aa6e86,subnet-093f7d804559ba283
+
+  SecurityGroup:
+    Type: String
+    Default: sg-03356b93c8c5f453d
 
 Resources:
-  AuroraDBSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Allow access to Aurora DB
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          CidrIp: 0.0.0.0/0
-
-  AuroraDB:
+  MySQLDB:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
     Properties:
-      Engine: aurora
+      Engine: mysql
       DBInstanceIdentifier: !Ref DBInstanceIdentifier
       MasterUsername: !Ref MasterUsername
       MasterUserPassword: !Ref MasterUserPassword
       AllocatedStorage: 5
-      DBInstanceClass: db.t3.small # Smallest and least expensive instance class
-      EngineVersion: 8.0
+      DBInstanceClass: db.t3.micro # Smallest and least expensive instance class
       BackupRetentionPeriod: 0
       MultiAZ: false # For cost-saving in a testing environment
       Port: 3306
       VPCSecurityGroups:
-        - !Ref AuroraDBSecurityGroup
+        - !Ref SecurityGroup
 
-  AuroraDBProxy:
+  MySQLDBProxy:
     Type: "AWS::RDS::DBProxy"
     DeletionPolicy: Delete
     Properties:
       DBProxyName: !Ref ProxyName
       EngineFamily: "MYSQL"
+      RoleArn: !Ref SecretReaderRoleArn
       Auth:
-        - AuthScheme: SECRETS
-          SecretArn: !GetAtt ProxySecret.Arn
-          IAMAuth: DISABLED
-
-  ProxySecret:
-    Type: "AWS::SecretsManager::Secret"
-    DeletionPolicy: Delete
-    Properties:
-      Name: !Sub "${AWS::StackName}-ProxySecret"
-      Description: "Secret for Aurora Proxy"
-      GenerateSecretString:
-        SecretStringTemplate: '{"username":"admin"}'
-        GenerateStringKey: "password"
-        PasswordLength: 16
-        ExcludeCharacters: '"@/\'
+        - {
+            AuthScheme: SECRETS,
+            SecretArn: !Ref ProxySecretArn,
+            IAMAuth: DISABLED,
+          }
+      VpcSubnetIds:
+        Fn::Split: [",", !Ref SubnetIds]
 
 Outputs:
-  AuroraDBEndpoint:
+  MySQLDBEndpoint:
     Description: "Aurora Database Endpoint"
-    Value: !GetAtt AuroraDB.Endpoint.Address
+    Value: !GetAtt MySQLDB.Endpoint.Address
 
-  AuroraDBProxyEndpoint:
+  MySQLDBProxyEndpoint:
     Description: "Aurora Database Proxy Endpoint"
-    Value: !GetAtt AuroraDBProxy.Endpoint
+    Value: !GetAtt MySQLDBProxy.Endpoint
