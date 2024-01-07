@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  DBName:
+    Type: String
+    Description: The name of the database
+    Default: MyAuroraDB
+
+  MasterUsername:
+    Type: String
+    Description: The master username for the database
+    Default: admin
+
+  MasterUserPassword:
+    Type: String
+    NoEcho: true
+    Description: The master user password for the database
+    Default: MySecurePassword123
+
+  DBInstanceIdentifier:
+    Type: String
+    Description: The identifier for the Aurora DB instance
+    Default: MyAuroraDBInstance
+
+  ProxyName:
+    Type: String
+    Description: The name for the Aurora Database Proxy
+    Default: MyAuroraDBProxy
+
+Resources:
+  AuroraDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to Aurora DB
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0
+
+  AuroraDB:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      Engine: aurora
+      DBInstanceIdentifier: !Ref DBInstanceIdentifier
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      AllocatedStorage: 5
+      DBInstanceClass: db.t3.small # Smallest and least expensive instance class
+      EngineVersion: 8.0
+      BackupRetentionPeriod: 0
+      MultiAZ: false # For cost-saving in a testing environment
+      Port: 3306
+      VPCSecurityGroups:
+        - !Ref AuroraDBSecurityGroup
+
+  AuroraDBProxy:
+    Type: "AWS::RDS::DBProxy"
+    DeletionPolicy: Delete
+    Properties:
+      DBProxyName: !Ref ProxyName
+      EngineFamily: "MYSQL"
+      Auth:
+        - AuthScheme: SECRETS
+          SecretArn: !GetAtt ProxySecret.Arn
+          IAMAuth: DISABLED
+
+  ProxySecret:
+    Type: "AWS::SecretsManager::Secret"
+    DeletionPolicy: Delete
+    Properties:
+      Name: !Sub "${AWS::StackName}-ProxySecret"
+      Description: "Secret for Aurora Proxy"
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"admin"}'
+        GenerateStringKey: "password"
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
+
+Outputs:
+  AuroraDBEndpoint:
+    Description: "Aurora Database Endpoint"
+    Value: !GetAtt AuroraDB.Endpoint.Address
+
+  AuroraDBProxyEndpoint:
+    Description: "Aurora Database Proxy Endpoint"
+    Value: !GetAtt AuroraDBProxy.Endpoint
